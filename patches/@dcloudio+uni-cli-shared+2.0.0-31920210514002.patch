@@ -1,5 +1,5 @@
 diff --git a/node_modules/@dcloudio/uni-cli-shared/lib/cache.js b/node_modules/@dcloudio/uni-cli-shared/lib/cache.js
-index ef8e296..dd3b7c3 100644
+index ef8e296..fc08425 100644
 --- a/node_modules/@dcloudio/uni-cli-shared/lib/cache.js
 +++ b/node_modules/@dcloudio/uni-cli-shared/lib/cache.js
 @@ -136,7 +136,7 @@ function updateUsingAutoImportComponents (name, usingAutoImportComponents) {
