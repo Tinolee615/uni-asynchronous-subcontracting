@@ -738,7 +738,7 @@ index 0000000..52d0c44
 +}
 \ No newline at end of file
 diff --git a/node_modules/@dcloudio/webpack-uni-mp-loader/lib/babel/scoped-component-traverse.js b/node_modules/@dcloudio/webpack-uni-mp-loader/lib/babel/scoped-component-traverse.js
-index cc2fcc4..d6ee03b 100644
+index cc2fcc4..5957d7a 100644
 --- a/node_modules/@dcloudio/webpack-uni-mp-loader/lib/babel/scoped-component-traverse.js
 +++ b/node_modules/@dcloudio/webpack-uni-mp-loader/lib/babel/scoped-component-traverse.js
 @@ -47,11 +47,32 @@ function handleObjectExpression (declaration, path, state) {
@@ -776,10 +776,21 @@ index cc2fcc4..d6ee03b 100644
  function handleComponentsObjectExpression (componentsObjExpr, path, state, prepend) {
    const properties = componentsObjExpr.properties
 diff --git a/node_modules/@dcloudio/webpack-uni-mp-loader/lib/plugin/generate-json.js b/node_modules/@dcloudio/webpack-uni-mp-loader/lib/plugin/generate-json.js
-index ab8fe09..0b95f04 100644
+index ab8fe09..7c3d72c 100644
 --- a/node_modules/@dcloudio/webpack-uni-mp-loader/lib/plugin/generate-json.js
 +++ b/node_modules/@dcloudio/webpack-uni-mp-loader/lib/plugin/generate-json.js
-@@ -122,7 +122,22 @@ module.exports = function generateJson (compilation) {
+@@ -1,7 +1,9 @@
+ const path = require('path')
+ 
+ const {
+-  normalizePath
++  normalizePath,
++  hyphenate,
++  getComponentName
+ } = require('@dcloudio/uni-cli-shared')
+ 
+ const {
+@@ -122,7 +124,22 @@ module.exports = function generateJson (compilation) {
        jsonObj.usingComponents = Object.assign(jsonObj.usingAutoImportComponents, jsonObj.usingComponents)
      }
      delete jsonObj.usingAutoImportComponents
@@ -788,11 +799,11 @@ index ab8fe09..0b95f04 100644
 +    // 异步分包自定义组件注册其他分包的组件引入
 +    if (jsonObj.asyncCustomComponents && jsonObj.asyncCustomComponents.length) {
 +      const asyncCustomComponents = jsonObj.asyncCustomComponents.reduce((p, n) => {
-+        p[n.name] = n.value
++        p[getComponentName(hyphenate(n.name))] = n.value
 +        return p
 +      }, {})
 +      const componentPlaceholder = jsonObj.asyncCustomComponents.reduce((p, n) => {
-+        p[n.name] = 'view'
++        p[getComponentName(hyphenate(n.name))] = 'view'
 +        return p
 +      }, {})
 +      jsonObj.componentPlaceholder = componentPlaceholder
@@ -804,7 +815,7 @@ index ab8fe09..0b95f04 100644
      if (process.env.UNI_PLATFORM === 'mp-baidu') {
        const usingComponents = jsonObj.usingComponents || {}
 diff --git a/node_modules/@dcloudio/webpack-uni-mp-loader/lib/script-new.js b/node_modules/@dcloudio/webpack-uni-mp-loader/lib/script-new.js
-index 335552e..9d313c7 100644
+index 335552e..6b79605 100644
 --- a/node_modules/@dcloudio/webpack-uni-mp-loader/lib/script-new.js
 +++ b/node_modules/@dcloudio/webpack-uni-mp-loader/lib/script-new.js
 @@ -25,6 +25,7 @@ const {
