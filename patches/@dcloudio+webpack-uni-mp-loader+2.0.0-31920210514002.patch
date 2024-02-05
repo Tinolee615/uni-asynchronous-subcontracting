@@ -1,0 +1,190 @@
+diff --git a/node_modules/@dcloudio/webpack-uni-mp-loader/lib/babel/scoped-async-component-traverse.js b/node_modules/@dcloudio/webpack-uni-mp-loader/lib/babel/scoped-async-component-traverse.js
+new file mode 100644
+index 0000000..52d0c44
+--- /dev/null
++++ b/node_modules/@dcloudio/webpack-uni-mp-loader/lib/babel/scoped-async-component-traverse.js
+@@ -0,0 +1,57 @@
++const t = require('@babel/types')
++const babelTraverse = require('@babel/traverse').default
++const parser = require('@babel/parser')
++const {
++  getBabelParserOptions
++} = require('@dcloudio/uni-cli-shared/lib/platform')
++
++const {
++  getCode
++} = require('@dcloudio/uni-template-compiler/lib/util')
++
++function handleObjectExpression(contentObj, path, state, ast) {
++  const properties = path.container.value.properties
++  let list = ''
++  const componentNodes = []
++  properties.forEach(_ => {
++    const name = _.key.value.replace(/\-(\w)/g, function(all, letter){
++      return letter.toUpperCase();
++    })
++    const value = _.value.value
++    const asyncCustomComponentsToImport = `import ${name} from '${'@' + value}';`
++    list += asyncCustomComponentsToImport
++    const node = parser.parseExpression(name, getBabelParserOptions())
++    componentNodes.push(node)
++  })
++  const nodes = parser.parse(list, getBabelParserOptions()).program.body
++  const idx = ast.program.body.findIndex(_ => _.type === 'ExportDefaultDeclaration')
++  const ExportDefaultDeclarationNode = ast.program.body[idx]
++  ast.program.body.splice(idx, 0, ...nodes)
++
++  const componentIdx = ExportDefaultDeclarationNode.declaration.properties.findIndex(_ => _.key.name === 'components')
++  const componentNode = ExportDefaultDeclarationNode.declaration.properties[componentIdx]
++  componentNode.value.properties.splice(componentIdx, 0, ...componentNodes)
++
++  const content = getCode(ast)
++  contentObj.content = content
++}
++
++module.exports = function (content, state = {
++  type: 'Component',
++  components: [],
++  options: {}
++}) {
++  const contentObj = {}
++  const ast = parser.parse(content, getBabelParserOptions())
++  babelTraverse(ast, {
++    enter(path) {
++      if (path.isIdentifier({ name: 'asyncCustomComponents' })) {
++        handleObjectExpression(contentObj, path, state, ast)
++      }
++    },
++  });
++  return {
++    content: contentObj.content,
++    state
++  }
++}
+\ No newline at end of file
+diff --git a/node_modules/@dcloudio/webpack-uni-mp-loader/lib/babel/scoped-component-traverse.js b/node_modules/@dcloudio/webpack-uni-mp-loader/lib/babel/scoped-component-traverse.js
+index cc2fcc4..d6ee03b 100644
+--- a/node_modules/@dcloudio/webpack-uni-mp-loader/lib/babel/scoped-component-traverse.js
++++ b/node_modules/@dcloudio/webpack-uni-mp-loader/lib/babel/scoped-component-traverse.js
+@@ -47,11 +47,32 @@ function handleObjectExpression (declaration, path, state) {
+       t.isIdentifier(prop.key) &&
+       prop.key.name === 'components'
+   })[0]
+-
++  // ----------------------(新增)
++  const asyncCustomComponentsProperty = declaration.properties.filter(prop => {
++    return t.isObjectProperty(prop) &&
++      t.isIdentifier(prop.key) &&
++      prop.key.name === 'asyncCustomComponents'
++  })[0]
++  if(asyncCustomComponentsProperty) {
++    handleAsyncCustomComponentsObjectExpression(asyncCustomComponentsProperty.value, path, state)
++  }
++  // ----------------------
+   if (componentsProperty && t.isObjectExpression(componentsProperty.value)) {
+     handleComponentsObjectExpression(componentsProperty.value, path, state)
+   }
+ }
++// ----------------------(新增)
++function handleAsyncCustomComponentsObjectExpression(componentsObjExpr, path, state) {
++  const properties = componentsObjExpr.properties
++  const asyncCustomComponentsDeclaration = properties.map(prop => {
++    return {
++      name: prop.key.name || prop.key.value,
++      value: prop.value.value
++    }
++  })
++  state.asyncCustomComponents = asyncCustomComponentsDeclaration
++}
++// ----------------------
+ 
+ function handleComponentsObjectExpression (componentsObjExpr, path, state, prepend) {
+   const properties = componentsObjExpr.properties
+diff --git a/node_modules/@dcloudio/webpack-uni-mp-loader/lib/plugin/generate-json.js b/node_modules/@dcloudio/webpack-uni-mp-loader/lib/plugin/generate-json.js
+index ab8fe09..0b95f04 100644
+--- a/node_modules/@dcloudio/webpack-uni-mp-loader/lib/plugin/generate-json.js
++++ b/node_modules/@dcloudio/webpack-uni-mp-loader/lib/plugin/generate-json.js
+@@ -122,7 +122,22 @@ module.exports = function generateJson (compilation) {
+       jsonObj.usingComponents = Object.assign(jsonObj.usingAutoImportComponents, jsonObj.usingComponents)
+     }
+     delete jsonObj.usingAutoImportComponents
+-
++    // ----------------------(新增)
++    // 异步分包自定义组件注册其他分包的组件引入
++    if (jsonObj.asyncCustomComponents && jsonObj.asyncCustomComponents.length) {
++      const asyncCustomComponents = jsonObj.asyncCustomComponents.reduce((p, n) => {
++        p[n.name] = n.value
++        return p
++      }, {})
++      const componentPlaceholder = jsonObj.asyncCustomComponents.reduce((p, n) => {
++        p[n.name] = 'view'
++        return p
++      }, {})
++      jsonObj.componentPlaceholder = componentPlaceholder
++      jsonObj.usingComponents = Object.assign(asyncCustomComponents, jsonObj.usingComponents)
++    }
++    delete jsonObj.asyncCustomComponents
++    // ----------------------
+     // 百度小程序插件内组件使用 usingSwanComponents
+     if (process.env.UNI_PLATFORM === 'mp-baidu') {
+       const usingComponents = jsonObj.usingComponents || {}
+diff --git a/node_modules/@dcloudio/webpack-uni-mp-loader/lib/script-new.js b/node_modules/@dcloudio/webpack-uni-mp-loader/lib/script-new.js
+index 335552e..9d313c7 100644
+--- a/node_modules/@dcloudio/webpack-uni-mp-loader/lib/script-new.js
++++ b/node_modules/@dcloudio/webpack-uni-mp-loader/lib/script-new.js
+@@ -25,6 +25,7 @@ const {
+ const preprocessor = require('@dcloudio/vue-cli-plugin-uni/packages/webpack-preprocess-loader/preprocess')
+ 
+ const traverse = require('./babel/scoped-component-traverse')
++const asyncTraverse = require('./babel/scoped-async-component-traverse')
+ 
+ const {
+   resolve,
+@@ -74,10 +75,22 @@ module.exports = function (content, map) {
+   if (!type) {
+     type = 'Component'
+   }
+-
++  // ----------------------(新增)
++  // asyncCustomComponents 配置的content替换
++  if(content.includes('asyncCustomComponents')) {
++    const asyncTraverseObj = asyncTraverse(content, {
++      type,
++      components: []
++    })
++    content = asyncTraverseObj.content ? asyncTraverseObj.content : content
++  }
++  // ----------------------
+   const {
+     state: {
+-      components
++      components,
++      // ----------------------(新增)
++      asyncCustomComponents,
++      // ----------------------
+     }
+   } = traverse(parser.parse(content, getBabelParserOptions()), {
+     type,
+@@ -92,7 +105,9 @@ module.exports = function (content, map) {
+       return
+     }
+     // 防止组件从有到无，App.vue 中不支持使用组件
+-    updateUsingComponents(resourcePath, Object.create(null), type)
++    // ----------------------(新增)
++    updateUsingComponents(resourcePath, Object.create(null), type, asyncCustomComponents)
++    // ----------------------
+     callback(null, content, map)
+     return
+   }
+@@ -127,8 +142,9 @@ module.exports = function (content, map) {
+       callback(new Error('babel-loader 查找失败'), content)
+     } else {
+       addDynamicImport(babelLoader, resourcePath, dynamicImports)
+-
+-      updateUsingComponents(resourcePath, usingComponents, type)
++      // ----------------------(新增)
++      updateUsingComponents(resourcePath, usingComponents, type, asyncCustomComponents)
++      // ----------------------
+       callback(null, content, map)
+     }
+   }, err => {
