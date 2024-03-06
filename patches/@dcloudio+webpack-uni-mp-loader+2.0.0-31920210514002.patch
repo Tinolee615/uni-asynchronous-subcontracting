@@ -101,7 +101,7 @@ index cc2fcc4..5957d7a 100644
  function handleComponentsObjectExpression (componentsObjExpr, path, state, prepend) {
    const properties = componentsObjExpr.properties
 diff --git a/node_modules/@dcloudio/webpack-uni-mp-loader/lib/plugin/generate-json.js b/node_modules/@dcloudio/webpack-uni-mp-loader/lib/plugin/generate-json.js
-index ab8fe09..7c3d72c 100644
+index ab8fe09..ac4ad5f 100644
 --- a/node_modules/@dcloudio/webpack-uni-mp-loader/lib/plugin/generate-json.js
 +++ b/node_modules/@dcloudio/webpack-uni-mp-loader/lib/plugin/generate-json.js
 @@ -1,7 +1,9 @@
@@ -131,7 +131,7 @@ index ab8fe09..7c3d72c 100644
 +        p[getComponentName(hyphenate(n.name))] = 'view'
 +        return p
 +      }, {})
-+      jsonObj.componentPlaceholder = componentPlaceholder
++      jsonObj.componentPlaceholder = Object.assign((jsonObj.componentPlaceholder || {}), componentPlaceholder)
 +      jsonObj.usingComponents = Object.assign(asyncCustomComponents, jsonObj.usingComponents)
 +    }
 +    delete jsonObj.asyncCustomComponents
