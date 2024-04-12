@@ -1,9 +1,9 @@
 diff --git a/node_modules/@dcloudio/webpack-uni-mp-loader/lib/babel/scoped-async-component-traverse.js b/node_modules/@dcloudio/webpack-uni-mp-loader/lib/babel/scoped-async-component-traverse.js
 new file mode 100644
-index 0000000..52d0c44
+index 0000000..6998672
 --- /dev/null
 +++ b/node_modules/@dcloudio/webpack-uni-mp-loader/lib/babel/scoped-async-component-traverse.js
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,67 @@
 +const t = require('@babel/types')
 +const babelTraverse = require('@babel/traverse').default
 +const parser = require('@babel/parser')
@@ -35,8 +35,18 @@ index 0000000..52d0c44
 +  ast.program.body.splice(idx, 0, ...nodes)
 +
 +  const componentIdx = ExportDefaultDeclarationNode.declaration.properties.findIndex(_ => _.key.name === 'components')
-+  const componentNode = ExportDefaultDeclarationNode.declaration.properties[componentIdx]
-+  componentNode.value.properties.splice(componentIdx, 0, ...componentNodes)
++  console.log('[componentIdx]', componentIdx);
++  if(componentIdx === -1) {
++    const _node = parser.parse('const a = {components: {}}', getBabelParserOptions()).program.body
++    const comNode = _node[0]?.declarations[0]?.init?.properties[0]
++    const asyncComponentIdx = ExportDefaultDeclarationNode.declaration.properties.findIndex(_ => _.key.name === 'asyncCustomComponents')
++    ExportDefaultDeclarationNode.declaration.properties.splice(asyncComponentIdx, 0, comNode)
++  }
++  const _componentIdx = ExportDefaultDeclarationNode.declaration.properties.findIndex(_ => _.key.name === 'components' || _.key.value === 'components')
++  if(_componentIdx !== -1) {
++    const componentNode = ExportDefaultDeclarationNode.declaration.properties[_componentIdx]
++    componentNode.value.properties.splice(0, 0, ...componentNodes)
++  }
 +
 +  const content = getCode(ast)
 +  contentObj.content = content

@@ -1,5 +1,5 @@
 diff --git a/node_modules/@dcloudio/uni-mp-vite/dist/plugins/usingComponents.js b/node_modules/@dcloudio/uni-mp-vite/dist/plugins/usingComponents.js
-index 03a63ee..0ee64cf 100644
+index 03a63ee..44d3eb9 100644
 --- a/node_modules/@dcloudio/uni-mp-vite/dist/plugins/usingComponents.js
 +++ b/node_modules/@dcloudio/uni-mp-vite/dist/plugins/usingComponents.js
 @@ -7,6 +7,51 @@ exports.dynamicImport = exports.uniUsingComponentsPlugin = void 0;
@@ -54,7 +54,7 @@ index 03a63ee..0ee64cf 100644
  function uniUsingComponentsPlugin(options = {}) {
      const normalizeComponentName = options.normalizeComponentName || ((name) => name);
      const parseAst = (source, id) => {
-@@ -66,7 +111,42 @@ function uniUsingComponentsPlugin(options = {}) {
+@@ -66,7 +111,60 @@ function uniUsingComponentsPlugin(options = {}) {
              if (!uni_cli_shared_1.EXTNAME_VUE.includes(path_1.default.extname(filename))) {
                  return null;
              }
@@ -62,11 +62,13 @@ index 03a63ee..0ee64cf 100644
 +            let ast = parseAst(source, id);
 +            if(source.includes('asyncCustomComponents')) {
 +                const constNodes = ast.body.filter(_ => _.type === 'VariableDeclaration' && _.kind === 'const')
++                let properComs = ''
 +                let asyncCustomComponents = ''
 +                let components = ''
 +                constNodes.forEach(_ => {
 +                    (_.declarations || []).forEach(__ => {
 +                        if(__.init.type === 'ObjectExpression') {
++                            properComs = __.init.properties
 +                            __.init.properties.forEach(proper => {
 +                                if(proper.key.name === 'asyncCustomComponents') {
 +                                    asyncCustomComponents = proper
@@ -78,6 +80,22 @@ index 03a63ee..0ee64cf 100644
 +                        }
 +                    })
 +                })
++                if(!components) {
++                    const componentsBody = parser.parse('const a = { components: {} }', getBabelParserOptions()).program.body
++                    const componentsNode = componentsBody[0]?.declarations[0]?.init?.properties[0]
++                    properComs.splice(0, 0, componentsNode)
++                    constNodes.forEach(_ => {
++                        (_.declarations || []).forEach(__ => {
++                            if(__.init.type === 'ObjectExpression') {
++                                __.init.properties.forEach(proper => {
++                                    if(proper.key.name === 'components') {
++                                        components = proper
++                                    }
++                                })
++                            }
++                        })
++                    })
++                }
 +                const contentObj = {}
 +                const {
 +                    componentNames,
