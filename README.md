@@ -622,8 +622,6 @@ module.exports = function (content, map) {
 ### 3.2 生成patches补丁包
 > 通过patch-package给@dcloudio打补丁包
 
-教程：[手把手教你使用patch-package给npm包打补丁 - 掘金](https://juejin.cn/post/6962554654643191815)
-
 #### 1、项目根目录生成patches
 ```
 @dcloudio+uni-cli-shared+2.0.0-31920210514002.patch
@@ -892,6 +890,252 @@ process.exit(0);
 "scripts": {
     "postinstall": "node ./scripts/patch-package-init.js patch-package"
 }
+```
+#### 4、vue3架构补丁补充
+```
+diff --git a/node_modules/@dcloudio/uni-cli-shared/dist/json/mp/jsonFile.js b/node_modules/@dcloudio/uni-cli-shared/dist/json/mp/jsonFile.js
+index db0f07f..52a0f9b 100644
+--- a/node_modules/@dcloudio/uni-cli-shared/dist/json/mp/jsonFile.js
++++ b/node_modules/@dcloudio/uni-cli-shared/dist/json/mp/jsonFile.js
+@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
+     return (mod && mod.__esModule) ? mod : { "default": mod };
+ };
+ Object.defineProperty(exports, "__esModule", { value: true });
+-exports.findMiniProgramUsingComponents = exports.isMiniProgramUsingComponent = exports.addMiniProgramUsingComponents = exports.addMiniProgramComponentJson = exports.addMiniProgramPageJson = exports.addMiniProgramAppJson = exports.findChangedJsonFiles = exports.normalizeJsonFilename = exports.findUsingComponents = exports.findJsonFile = exports.getComponentJsonFilenames = exports.hasJsonFile = exports.isMiniProgramPageSfcFile = exports.isMiniProgramPageFile = void 0;
++exports.findMiniProgramUsingComponents = exports.isMiniProgramUsingComponent = exports.addMiniProgramUsingComponents = exports.addMiniProgramAsyncComponents = exports.addMiniProgramComponentJson = exports.addMiniProgramPageJson = exports.addMiniProgramAppJson = exports.findChangedJsonFiles = exports.normalizeJsonFilename = exports.findUsingComponents = exports.findJsonFile = exports.getComponentJsonFilenames = exports.hasJsonFile = exports.isMiniProgramPageSfcFile = exports.isMiniProgramPageFile = void 0;
+ const path_1 = __importDefault(require("path"));
+ const shared_1 = require("@vue/shared");
+ const utils_1 = require("../../utils");
+@@ -14,6 +14,7 @@ const jsonFilesCache = new Map();
+ const jsonPagesCache = new Map();
+ const jsonComponentsCache = new Map();
+ const jsonUsingComponentsCache = new Map();
++const jsonAsyncComponentsCache = new Map();
+ function isMiniProgramPageFile(file, inputDir) {
+     if (inputDir && path_1.default.isAbsolute(file)) {
+         file = (0, utils_1.normalizePath)(path_1.default.relative(inputDir, file));
+@@ -46,6 +47,10 @@ function findUsingComponents(filename) {
+     return jsonUsingComponentsCache.get(filename);
+ }
+ exports.findUsingComponents = findUsingComponents;
++function findAsyncComponents(filename) {
++    return jsonAsyncComponentsCache.get(filename);
++}
++exports.findAsyncComponents = findAsyncComponents;
+ function normalizeJsonFilename(filename) {
+     return (0, utils_1.normalizeNodeModules)(filename);
+ }
+@@ -79,7 +84,20 @@ function findChangedJsonFiles(supportGlobalUsingComponents = true) {
+                     usingComponents[name] = (0, resolve_1.relativeFile)(filename, componentFilename.slice(1));
+                 }
+             });
+-            newJson.usingComponents = usingComponents;
++            let asyncComponents = []
++            if(jsonAsyncComponentsCache.get(filename)) {
++                const rename = (name) => name.startsWith('wx-') ? name.replace('wx-', 'weixin-') : name
++                asyncComponents = Object.entries(jsonAsyncComponentsCache.get(filename)).reduce((p, [key, value]) => {
++                    p[rename(key)] = value.value
++                    return p
++                }, {})
++                const componentPlaceholder = Object.entries(jsonAsyncComponentsCache.get(filename)).reduce((p, [key, value]) => {
++                    p[rename(key)] = 'view'
++                    return p
++                }, {})
++                newJson.componentPlaceholder = Object.assign((newJson.componentPlaceholder || {}), componentPlaceholder);
++            }
++            newJson.usingComponents = Object.assign(usingComponents, asyncComponents);
+         }
+         const jsonStr = JSON.stringify(newJson, null, 2);
+         if (jsonFilesCache.get(filename) !== jsonStr) {
+@@ -114,6 +132,10 @@ function addMiniProgramUsingComponents(filename, json) {
+     jsonUsingComponentsCache.set(filename, json);
+ }
+ exports.addMiniProgramUsingComponents = addMiniProgramUsingComponents;
++function addMiniProgramAsyncComponents(filename, json) {
++    jsonAsyncComponentsCache.set(filename, json);
++}
++exports.addMiniProgramAsyncComponents = addMiniProgramAsyncComponents;
+ function isMiniProgramUsingComponent(name, options) {
+     return !!findMiniProgramUsingComponents(options)[name];
+ }
+diff --git a/node_modules/@dcloudio/uni-cli-shared/dist/mp/usingComponents.js b/node_modules/@dcloudio/uni-cli-shared/dist/mp/usingComponents.js
+index 8ded305..531471c 100644
+--- a/node_modules/@dcloudio/uni-cli-shared/dist/mp/usingComponents.js
++++ b/node_modules/@dcloudio/uni-cli-shared/dist/mp/usingComponents.js
+@@ -123,6 +123,9 @@ function updateMiniProgramComponentsByMainFilename(mainFilename, inputDir, norma
+     }, scriptDescriptor.bindingComponents);
+     const imports = parseImports(mainDescriptor.imports, scriptDescriptor.imports, templateDescriptor.imports);
+     (0, jsonFile_1.addMiniProgramUsingComponents)((0, utils_1.removeExt)((0, utils_1.normalizeMiniProgramFilename)(mainFilename, inputDir)), createUsingComponents(bindingComponents, imports, inputDir, normalizeComponentName));
++    if(scriptDescriptor.bindingAsyncComponents) {
++        (0, jsonFile_1.addMiniProgramAsyncComponents)((0, utils_1.removeExt)((0, utils_1.normalizeMiniProgramFilename)(mainFilename, inputDir)), scriptDescriptor.bindingAsyncComponents);
++    }
+ }
+ exports.updateMiniProgramComponentsByMainFilename = updateMiniProgramComponentsByMainFilename;
+ function findBindingComponent(tag, bindingComponents) {
+@@ -204,7 +207,9 @@ async function parseScriptDescriptor(filename, ast, options) {
+     const imports = options.isExternal
+         ? await parseVueComponentImports(filename, ast.body.filter((node) => (0, types_1.isImportDeclaration)(node)), options.resolve)
+         : [];
++    const asyncCustomComponents = parseAsyncComponents(ast)
+     const descriptor = {
++        bindingAsyncComponents: asyncCustomComponents,
+         bindingComponents: parseComponents(ast),
+         setupBindingComponents: findBindingComponents(ast.body),
+         imports,
+@@ -353,6 +358,48 @@ function parseComponents(ast) {
+     });
+     return bindingComponents;
+ }
++/**
++ * 从 asyncComponents 中查找定义的异步分包组件
++ * @param ast
++ * @param bindingComponents
++ */
++function parseAsyncComponents(ast) {
++    const bindingAsyncComponents = {};
++    estree_walker_1.walk(ast, {
++        enter(child) {
++            if (!(0, types_1.isObjectExpression)(child)) {
++                return;
++            }
++            const componentsProp = child.properties.find((prop) => (0, types_1.isObjectProperty)(prop) &&
++                (0, types_1.isIdentifier)(prop.key) &&
++                prop.key.name === 'asyncCustomComponents');
++            if (!componentsProp) {
++                return;
++            }
++            const componentsExpr = componentsProp.value;
++            if (!(0, types_1.isObjectExpression)(componentsExpr)) {
++                return;
++            }
++            componentsExpr.properties.forEach((prop) => {
++                if (!(0, types_1.isObjectProperty)(prop)) {
++                    return;
++                }
++                if (!(0, types_1.isStringLiteral)(prop.key)) {
++                    return;
++                }
++                if (!(0, types_1.isStringLiteral)(prop.value)) {
++                    return;
++                }
++                bindingAsyncComponents[prop.key.value] = {
++                    tag: prop.key.value,
++                    value: prop.value.value,
++                    type: 'asyncComponent',
++                };
++            });
++        },
++    });
++    return Object.keys(bindingAsyncComponents).length ? bindingAsyncComponents : null;
++}
+ /**
+  * vue component imports
+  * @param filename
+
+```
+
+```
+diff --git a/node_modules/@dcloudio/uni-mp-vite/dist/plugins/usingComponents.js b/node_modules/@dcloudio/uni-mp-vite/dist/plugins/usingComponents.js
+index 03a63ee..0ee64cf 100644
+--- a/node_modules/@dcloudio/uni-mp-vite/dist/plugins/usingComponents.js
++++ b/node_modules/@dcloudio/uni-mp-vite/dist/plugins/usingComponents.js
+@@ -7,6 +7,51 @@ exports.dynamicImport = exports.uniUsingComponentsPlugin = void 0;
+ const path_1 = __importDefault(require("path"));
+ const uni_cli_shared_1 = require("@dcloudio/uni-cli-shared");
+ const entry_1 = require("./entry");
++const parser = require('@babel/parser')
++const t = require('@babel/types')
++const babelGenerate = require('@babel/generator').default
++
++function getCode (node) {
++  return babelGenerate(t.cloneDeep(node), {
++    compact: 'auto',
++    jsescOption: {
++      quotes: 'single',
++      minimal: true
++    }
++  }).code
++}
++function getBabelParserOptions () {
++    return {
++        sourceType: 'module',
++        plugins: [
++            'optionalChaining',
++            'typescript',
++            ['decorators', {
++                decoratorsBeforeExport: true
++            }],
++            'classProperties'
++        ]
++    }
++}
++function handleObjectExpression(asyncCustomComponents) {
++    const properties = asyncCustomComponents.value.properties
++    let list = ''
++    const componentNames = []
++    properties.forEach(_ => {
++        const name = _.key.value.replace(/\-(\w)/g, function(all, letter){
++        return letter.toUpperCase();
++        })
++        const value = _.value.value
++        const asyncCustomComponentsToImport = `import ${name} from '${'@' + value}';`
++        list += asyncCustomComponentsToImport
++        componentNames.push(name)
++    })
++    return {
++        componentNames,
++        list,
++    }
++}
++
+ function uniUsingComponentsPlugin(options = {}) {
+     const normalizeComponentName = options.normalizeComponentName || ((name) => name);
+     const parseAst = (source, id) => {
+@@ -66,7 +111,42 @@ function uniUsingComponentsPlugin(options = {}) {
+             if (!uni_cli_shared_1.EXTNAME_VUE.includes(path_1.default.extname(filename))) {
+                 return null;
+             }
+-            const ast = parseAst(source, id);
++            let ast = parseAst(source, id);
++            if(source.includes('asyncCustomComponents')) {
++                const constNodes = ast.body.filter(_ => _.type === 'VariableDeclaration' && _.kind === 'const')
++                let asyncCustomComponents = ''
++                let components = ''
++                constNodes.forEach(_ => {
++                    (_.declarations || []).forEach(__ => {
++                        if(__.init.type === 'ObjectExpression') {
++                            __.init.properties.forEach(proper => {
++                                if(proper.key.name === 'asyncCustomComponents') {
++                                    asyncCustomComponents = proper
++                                }
++                                if(proper.key.name === 'components') {
++                                    components = proper
++                                }
++                            })
++                        }
++                    })
++                })
++                const contentObj = {}
++                const {
++                    componentNames,
++                    list,
++                } = handleObjectExpression(asyncCustomComponents)
++
++                const importNodes = parser.parse(list, getBabelParserOptions()).program.body
++                const idx = ast.body.findIndex(_ => _.type === 'ImportDeclaration')
++                ast.body.splice(idx + 1, 0, ...importNodes)
++                const componentsNodes = componentNames.map(_ => {
++                    return parser.parse(_, getBabelParserOptions()).program.body[0].expression
++                })
++                components.value.properties.splice(0, 0, ...componentsNodes)
++
++                source = getCode(ast)
++                ast = parseAst(source, id);
++            }
+             const descriptor = await (0, uni_cli_shared_1.parseMainDescriptor)(filename, ast, resolve);
+             (0, uni_cli_shared_1.updateMiniProgramComponentsByMainFilename)(filename, inputDir, normalizeComponentName);
+             return (0, uni_cli_shared_1.transformDynamicImports)(source, descriptor.imports, dynamicImportOptions);
+
 ```
 
 ## 4、项目中使用
