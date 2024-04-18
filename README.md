@@ -1146,6 +1146,7 @@ npm install --save-dev patch-package
 #### 4、2 拷贝scripts脚本和patches到项目根目录
 - ./scripts
 - ./patches
+- ./scripts/patch-package-init.js
 #### 4、3 配置postinstall自动执行patch
 ```
 {
