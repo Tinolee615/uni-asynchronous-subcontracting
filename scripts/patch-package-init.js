@@ -2,6 +2,8 @@ const execSync = require('child_process').execSync;
 const { INIT_CWD, PWD } = process.env;
 const packageConfig = require('../package.json')
 try {
+  // const currentBranch = execSync('git rev-parse --abbrev-ref HEAD').toString().trim();
+  // console.log(`当前Git分支: ${currentBranch}`);
   const vue3verify = /^\^3.*.*/.test(packageConfig.dependencies.vue)
   const patchDir = vue3verify ? '--patch-dir patches-vue3' : '--patch-dir patches'
 
