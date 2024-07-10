@@ -27,6 +27,7 @@
 ```
 ### 2.2 页面级&自定义组件级使用分包组件
 #### 2.2.1、在组件components注册同级设置asyncCustomComponents
+- 注意： asyncCustomComponents中key需要用短线命名
 ```
 asyncCustomComponents: {
     'item': '/minePackage/components/item/index',
